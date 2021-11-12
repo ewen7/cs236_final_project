@@ -1,0 +1,5 @@
+1. implement MNIST classifier
+2. train classifier on some datapoints
+3. implement VAE on MNIST (from A2) to get more datapoints
+4. label these new images using CNN or something
+5. retraining classifier
