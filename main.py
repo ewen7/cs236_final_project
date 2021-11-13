@@ -92,6 +92,10 @@ def main():
         all_classifier = Net()
         all_classifier.load_state_dict(torch.load(full_classifier_path))
 
+    classifier = Classifier(args, device)
+    initial_classifier = classifier.train(train_loader, test_loader, "initial")
+    classifier.test_model(initial_classifier, test_loader)
+
     ## VAE
     vae = fit_vae(args, train_loader, "vae")
 
@@ -128,11 +132,6 @@ def main():
     new_dataset = torch.utils.data.TensorDataset(query_x, x_labels)
     updated_dataset = torch.utils.data.ConcatDataset([train_subdataset, new_dataset])
     updated_loader = torch.utils.data.DataLoader(updated_dataset, **train_kwargs)
-
-    ## Classifiers
-    classifier = Classifier(args, device)
-    initial_classifier = classifier.train(train_loader, test_loader, "initial")
-    classifier.test_model(initial_classifier, test_loader)
 
     classifier = Classifier(args, device)
     new_classifier = classifier.train(updated_loader, test_loader, "new")
