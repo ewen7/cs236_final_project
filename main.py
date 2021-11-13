@@ -10,7 +10,7 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
-from tqdm import tqdm
+from tqdm import *
 import utils as ut
 from pprint import pprint
 
@@ -103,16 +103,18 @@ def main():
 
     ## VAE
 
+    mc_samp = 10
+
     prior_m = torch.zeros(200, args.z)
     prior_v = torch.ones(200, args.z)
     query_z = torch.normal(prior_m, prior_v).requires_grad_(True)
 
-    def simulated_annealing(f, x0, eps=0.1, horizon=100, T=10., cooling=0.1):
+    def simulated_annealing(f, x0, eps=0.1, horizon=10, T=10., cooling=0.1):
         x = torch.tensor(x0)
         x_best = torch.tensor(x0)
         f_cur = f(x)
         gamma = cooling ** (1 / horizon)
-        for i in range(horizon):
+        for i in trange(horizon):
             x_prop = x + torch.normal(eps * torch.ones(x.shape))
             f_prop = f(x_prop)
             accept_prob = torch.exp((f_cur - f_prop) / T)
@@ -124,15 +126,15 @@ def main():
 
     def active_objective(query_z):
         p_z = ut.log_normal(query_z, prior_m, prior_v).exp()
-        rec = torch.stack([vae.sample_x_given(query_z) for _ in range(100)])
-        pred_y = initial_classifier(rec)
-        entropies = td.Categorical(pred_y).entropy().mean(dim=0)
+        rec = torch.stack([vae.sample_x_given(query_z) for _ in range(mc_samp)])
+        pred_y = initial_classifier(rec.reshape(-1, 1, 28, 28))
+        entropies = td.Categorical(pred_y).entropy().reshape(mc_samp, 200).mean(dim=0)
         return p_z * entropies
 
     query_z = simulated_annealing(active_objective, query_z)
     query_x = vae.sample_x_given(query_z)
 
-    x_labels = all_classifier(query_x)
+    x_labels = all_classifier(query_x.view(query_x.size(0), 1, 28, 28))
     new_dataset = torch.utils.data.TensorDataset(query_x, x_labels)
     updated_dataset = torch.utils.data.ConcatDataset([train_subdataset, new_dataset])
     updated_loader = torch.utils.data.DataLoader(updated_dataset, **train_kwargs)
