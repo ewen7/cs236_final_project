@@ -28,6 +28,10 @@ def main():
                         help='number of epochs to train (default: 14)')
     parser.add_argument('--lr', type=float, default=1.0, metavar='LR',
                         help='learning rate (default: 1.0)')
+    parser.add_argument('-z', type=float, default=3, metavar='Z',
+                        help='latent dimension')
+    parser.add_argument('--device', type=str, default='cpu', metavar='DEV',
+                        help='device')
     parser.add_argument('--gamma', type=float, default=0.7, metavar='M',
                         help='Learning rate step gamma (default: 0.7)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
