@@ -28,6 +28,10 @@ def main():
                         help='input batch size for testing (default: 1000)')
     parser.add_argument('--epochs', type=int, default=14, metavar='N',
                         help='number of epochs to train (default: 14)')
+    parser.add_argument('--iter_max', type=int, default=20000, metavar='IN',
+                        help='number of VAE iterations to train (default: 14)')
+    parser.add_argument('--all_epochs', type=int, default=2, metavar='AN',
+                        help='number of epochs to train (default: 14)')
     parser.add_argument('--lr', type=float, default=1.0, metavar='LR',
                         help='learning rate (default: 1.0)')
     parser.add_argument('-z', type=float, default=3, metavar='Z',
@@ -79,11 +83,12 @@ def main():
     train_loader = torch.utils.data.DataLoader(train_subdataset,**train_kwargs)
     test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
 
+    vae = fit_vae(args, train_loader, "vae")
     ## Initial Classifiers
     full_classifier_path = 'checkpoints/full_classifier.pt'
     if not os.path.exists(full_classifier_path):
         epochs = args.epochs
-        args.epochs = 2
+        args.epochs = args.all_epochs
         classifier = Classifier(args, device)
         all_classifier = classifier.train(all_loader, test_loader, "all")
         torch.save(all_classifier.state_dict(), full_classifier_path)
@@ -97,7 +102,6 @@ def main():
     # classifier.test_model(initial_classifier, test_loader)
 
     ## VAE
-    vae = fit_vae(args, train_loader, "vae")
 
     prior_m = torch.zeros(200, args.z)
     prior_v = torch.ones(200, args.z)

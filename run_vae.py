@@ -19,7 +19,7 @@ def fit_vae(args, train_loader, model_name, overwrite=True):
           device=args.device,
           tqdm=tqdm.tqdm,
           writer=writer,
-          iter_max=20000,
+          iter_max=args.iter_max,
           iter_save=10000)
     # ut.evaluate_lower_bound(vae, labeled_subset, run_iwae=args.train == 2)
 
