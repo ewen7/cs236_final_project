@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.distributions as td
 import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
@@ -77,6 +78,7 @@ def main():
 
     classifier = Classifier(args, device)
     initial_classifier = classifier.train(train_loader, test_loader, "initial")
+    classifier.test_model(initial_classifier, test_loader)
 
     ## VAE
     vae = fit_vae(args, train_loader, "vae")
@@ -85,11 +87,47 @@ def main():
     prior_v = torch.ones(200, args.z)
     query_z = torch.normal(prior_m, prior_v).requires_grad_(True)
 
-    def active_objective():
-        log_p_z = ut.log_normal(query_z, prior_m, prior_v)
-        H
+    def simulated_annealing(f, x0, eps=0.1, horizon=100, T=10., cooling=0.1):
+        x = torch.tensor(x0)
+        x_best = torch.tensor(x0)
+        f_cur = f(x)
+        gamma = cooling ** (1 / horizon)
+        for i in range(horizon):
+            x_prop = x + torch.normal(eps * torch.ones(x.shape))
+            f_prop = f(x_prop)
+            accept_prob = torch.exp((f_cur - f_prop) / T)
+            accepted = torch.rand([x.size(0)], device=device) < accept_prob
+            x[accepted] = x_prop[accepted]
+            f_cur[accepted] = f_prop[accepted]
+            T *= gamma
+        return x
 
+    def active_objective(query_z):
+        p_z = ut.log_normal(query_z, prior_m, prior_v).exp()
+        rec = torch.stack([vae.sample_x_given(query_z) for _ in range(100)])
+        pred_y = initial_classifier(rec)
+        entropies = td.Categorical(pred_y).entropy().mean(dim=0)
+        return p_z * entropies
 
+    query_z = simulated_annealing(active_objective, query_z)
+    query_x = vae.sample_x_given(query_z)
+
+    x_labels = all_classifier(query_x)
+    new_dataset = torch.utils.data.TensorDataset(query_x, x_labels)
+    updated_dataset = torch.utils.data.ConcatDataset([train_subdataset, new_dataset])
+    train_loader = torch.utils.data.DataLoader(updated_dataset, **train_kwargs)
+
+    classifier = Classifier(args, device)
+    new_classifier = classifier.train(train_loader, test_loader, "initial")
+    classifier.test_model(new_classifier, test_loader)
+
+    fig, axs = plt.subplots(10, 20)
+    for i, ax in enumerate(axs.flat):
+        ax.imshow(query_x[i].view(28, 28).detach())
+        ax.axis('off')
+    plt.tight_layout()
+    plt.subplots_adjust(wspace=0.1, hspace=0.1)
+    plt.show()
     # expanded_dataset = None
     # expanded_loader = torch.utils.data.DataLoader(expanded_dataset,**train_kwargs)
     # expanded_classifier = classifier.train(expanded_dataset, test_loader, "expanded")
