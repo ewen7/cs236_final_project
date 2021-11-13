@@ -109,7 +109,7 @@ def main():
     prior_v = torch.ones(200, args.z)
     query_z = torch.normal(prior_m, prior_v).requires_grad_(True)
 
-    def simulated_annealing(f, x0, eps=0.1, horizon=10, T=10., cooling=0.1):
+    def simulated_annealing(f, x0, eps=0.1, horizon=100, T=10., cooling=0.1):
         x = torch.tensor(x0)
         x_best = torch.tensor(x0)
         f_cur = f(x)
