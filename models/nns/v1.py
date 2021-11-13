@@ -2,9 +2,25 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
-from codebase import utils as ut
+import utils as ut
 from torch import autograd, nn, optim
 from torch.nn import functional as F
+
+class Classifier(nn.Module):
+    def __init__(self, y_dim):
+        super().__init__()
+        self.y_dim = y_dim
+        self.net = nn.Sequential(
+            nn.Linear(784, 300),
+            nn.ELU(),
+            nn.Linear(300, 300),
+            nn.ELU(),
+            nn.Linear(300, y_dim),
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
 
 class Encoder(nn.Module):
     def __init__(self, z_dim, y_dim=0):
