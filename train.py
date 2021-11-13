@@ -74,5 +74,5 @@ def train(model, train_loader, labeled_subset, device, tqdm, writer,
                     ut.save_model_by_name(model, i)
 
                 if i == iter_max:
-                    return
+                    return model
     return model
