@@ -134,7 +134,7 @@ def main():
         return p_z * entropies
 
     query_z = simulated_annealing(active_objective, query_z, horizon=args.sa)
-    query_x = vae.sample_x_given(query_z)
+    query_x = vae.sample_x_given(query_z).detach()
 
     x_labels = all_classifier(query_x.view(query_x.size(0), 1, 28, 28)).argmax(-1)
     new_dataset = torch.utils.data.TensorDataset(query_x.view(query_x.size(0), 1, 28, 28), x_labels)
