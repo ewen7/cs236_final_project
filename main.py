@@ -72,10 +72,13 @@ def main():
     train_loader = torch.utils.data.DataLoader(train_subdataset,**train_kwargs)
     test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
 
+    epoch = args.epoch
     ## Initial Classifiers
+    args.epoch = 2
     classifier = Classifier(args, device)
     all_classifier = classifier.train(all_loader, test_loader, "all")
 
+    args.epoch = epoch
     classifier = Classifier(args, device)
     initial_classifier = classifier.train(train_loader, test_loader, "initial")
     classifier.test_model(initial_classifier, test_loader)
