@@ -30,6 +30,8 @@ def main():
                         help='number of epochs to train (default: 14)')
     parser.add_argument('--iter_max', type=int, default=20000, metavar='IN',
                         help='number of VAE iterations to train (default: 14)')
+    parser.add_argument('--sa', type=int, default=100, metavar='IN',
+                        help='number sa iters')
     parser.add_argument('--all_epochs', type=int, default=2, metavar='AN',
                         help='number of epochs to train (default: 14)')
     parser.add_argument('--lr', type=float, default=1.0, metavar='LR',
@@ -128,14 +130,14 @@ def main():
         p_z = ut.log_normal(query_z, prior_m, prior_v).exp()
         rec = torch.stack([vae.sample_x_given(query_z) for _ in range(mc_samp)])
         pred_y = initial_classifier(rec.reshape(-1, 1, 28, 28))
-        entropies = td.Categorical(pred_y).entropy().reshape(mc_samp, 200).mean(dim=0)
+        entropies = td.Categorical(logits=pred_y).entropy().reshape(mc_samp, 200).mean(dim=0)
         return p_z * entropies
 
-    query_z = simulated_annealing(active_objective, query_z)
+    query_z = simulated_annealing(active_objective, query_z, horizon=args.sa)
     query_x = vae.sample_x_given(query_z)
 
-    x_labels = all_classifier(query_x.view(query_x.size(0), 1, 28, 28))
-    new_dataset = torch.utils.data.TensorDataset(query_x, x_labels)
+    x_labels = all_classifier(query_x.view(query_x.size(0), 1, 28, 28)).argmax(-1)
+    new_dataset = torch.utils.data.TensorDataset(query_x.view(query_x.size(0), 1, 28, 28), x_labels)
     updated_dataset = torch.utils.data.ConcatDataset([train_subdataset, new_dataset])
     updated_loader = torch.utils.data.DataLoader(updated_dataset, **train_kwargs)
 
