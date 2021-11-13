@@ -14,6 +14,7 @@ from pprint import pprint
 from models.vae import VAE
 from train import train
 from classifier import Classifier
+from run_vae import fit_vae
 
 def main():
     # Training settings
@@ -64,28 +65,29 @@ def main():
                        transform=transform)
     subset = list(range(0, len(train_dataset), 200))
     train_subdataset = torch.utils.data.Subset(train_dataset, subset)
-
     test_dataset = datasets.MNIST('../data', train=False, transform=transform)
+
+    all_loader = torch.utils.data.DataLoader(train_dataset,**train_kwargs)
     train_loader = torch.utils.data.DataLoader(train_subdataset,**train_kwargs)
     test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
-    
+
+    ## Initial Classifiers
+    classifier = Classifier(args, device)
+    all_classifier = classifier.train(all_loader, test_loader, "all")
+
     classifier = Classifier(args, device)
     initial_classifier = classifier.train(train_loader, test_loader, "initial")
 
     ## VAE
+    vae = fit_vae(args, train_loader, "vae")
 
-    vae = VAE(z_dim=args.z, name=model_name).to(device)
+    prior_m = torch.zeros(200, args.z)
+    prior_v = torch.ones(200, args.z)
+    query_z = torch.normal(prior_m, prior_v).requires_grad_(True)
 
-    writer = ut.prepare_writer(model_name, overwrite_existing=args.overwrite)
-    train(model=vae,
-          train_loader=train_loader,
-          labeled_subset=labeled_subset,
-          device=device,
-          tqdm=tqdm.tqdm,
-          writer=writer,
-          iter_max=args.iter_max,
-          iter_save=args.iter_save)
-    ut.evaluate_lower_bound(vae, labeled_subset, run_iwae=args.train == 2)
+    def active_objective():
+        log_p_z = ut.log_normal(query_z, prior_m, prior_v)
+        H
 
 
     # expanded_dataset = None

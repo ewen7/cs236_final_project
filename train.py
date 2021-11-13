@@ -75,3 +75,4 @@ def train(model, train_loader, labeled_subset, device, tqdm, writer,
 
                 if i == iter_max:
                     return
+    return model
