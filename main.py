@@ -1,11 +1,13 @@
 from __future__ import print_function
 import argparse
+import os
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as td
 import torch.optim as optim
+import matplotlib.pyplot as plt
 from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
 from tqdm import tqdm
@@ -14,7 +16,7 @@ from pprint import pprint
 
 from models.vae import VAE
 from train import train
-from classifier import Classifier
+from classifier import Classifier, Net
 from run_vae import fit_vae
 
 def main():
@@ -60,14 +62,15 @@ def main():
         train_kwargs.update(cuda_kwargs)
         test_kwargs.update(cuda_kwargs)
 
-    transform=transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
-        ])
+    transform=transforms.ToTensor()
+    # transforms.Compose([
+    #     transforms.ToTensor(),
+    #     transforms.Normalize((0.1307,), (0.3081,))
+    #     ])
 
     # TODO: update this to be subset of dataset
     train_dataset = datasets.MNIST('../data', train=True, download=True,
-                       transform=transform)
+                       transform=transform)         
     subset = list(range(0, len(train_dataset), 200))
     train_subdataset = torch.utils.data.Subset(train_dataset, subset)
     test_dataset = datasets.MNIST('../data', train=False, transform=transform)
@@ -76,16 +79,22 @@ def main():
     train_loader = torch.utils.data.DataLoader(train_subdataset,**train_kwargs)
     test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
 
-    epochs = args.epochs
     ## Initial Classifiers
-    args.epochs = 2
-    classifier = Classifier(args, device)
-    all_classifier = classifier.train(all_loader, test_loader, "all")
+    full_classifier_path = 'checkpoints/full_classifier.pt'
+    if not os.path.exists(full_classifier_path):
+        epochs = args.epochs
+        args.epochs = 2
+        classifier = Classifier(args, device)
+        all_classifier = classifier.train(all_loader, test_loader, "all")
+        torch.save(all_classifier.state_dict(), full_classifier_path)
+        args.epochs = epochs
+    else:
+        all_classifier = Net()
+        all_classifier.load_state_dict(torch.load(full_classifier_path))
 
-    args.epochs = epochs
-    classifier = Classifier(args, device)
-    initial_classifier = classifier.train(train_loader, test_loader, "initial")
-    classifier.test_model(initial_classifier, test_loader)
+    # classifier = Classifier(args, device)
+    # initial_classifier = classifier.train(train_loader, test_loader, "initial")
+    # classifier.test_model(initial_classifier, test_loader)
 
     ## VAE
     vae = fit_vae(args, train_loader, "vae")
@@ -122,11 +131,11 @@ def main():
     x_labels = all_classifier(query_x)
     new_dataset = torch.utils.data.TensorDataset(query_x, x_labels)
     updated_dataset = torch.utils.data.ConcatDataset([train_subdataset, new_dataset])
-    train_loader = torch.utils.data.DataLoader(updated_dataset, **train_kwargs)
+    updated_loader = torch.utils.data.DataLoader(updated_dataset, **train_kwargs)
 
     classifier = Classifier(args, device)
-    new_classifier = classifier.train(train_loader, test_loader, "initial")
-    classifier.test_model(new_classifier, test_loader)
+    new_classifier = classifier.train(updated_loader, test_loader, "new")
+    # classifier.test_model(new_classifier, test_loader)
 
     fig, axs = plt.subplots(10, 20)
     for i, ax in enumerate(axs.flat):
@@ -135,9 +144,6 @@ def main():
     plt.tight_layout()
     plt.subplots_adjust(wspace=0.1, hspace=0.1)
     plt.show()
-    # expanded_dataset = None
-    # expanded_loader = torch.utils.data.DataLoader(expanded_dataset,**train_kwargs)
-    # expanded_classifier = classifier.train(expanded_dataset, test_loader, "expanded")
 
 if __name__ == '__main__':
     main()
