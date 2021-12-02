@@ -28,7 +28,7 @@ def main():
                         help='input batch size for testing (default: 1000)')
     parser.add_argument('--epochs', type=int, default=14, metavar='N',
                         help='number of epochs to train (default: 14)')
-    parser.add_argument('--iter_max', type=int, default=20000, metavar='IN',
+    parser.add_argument('--iter-max', type=int, default=20000, metavar='IN',
                         help='number of VAE iterations to train (default: 14)')
     parser.add_argument('--sa', type=int, default=100, metavar='IN',
                         help='number sa iters')
@@ -36,8 +36,10 @@ def main():
                         help='number of epochs to train (default: 14)')
     parser.add_argument('--lr', type=float, default=1.0, metavar='LR',
                         help='learning rate (default: 1.0)')
-    parser.add_argument('--query_size', type=int, default=50,
+    parser.add_argument('--query-size', type=int, default=50,
                         help='query size')
+    parser.add_argument('--mc-samp', type=int, default=10,
+                        help='MC samples to use')
     parser.add_argument('--horizon', type=int, default=10,
                         help='horizon')
     parser.add_argument('-z', type=float, default=3, metavar='Z',
@@ -89,7 +91,6 @@ def main():
     train_loader = torch.utils.data.DataLoader(train_subdataset,**train_kwargs)
     test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
 
-    vae = fit_vae(args, train_loader, "vae")
     ## Initial Classifiers
     full_classifier_path = 'checkpoints/full_classifier.pt'
     if not os.path.exists(full_classifier_path):
@@ -110,53 +111,61 @@ def main():
 
     ## VAE
 
-    mc_samp = 10
+    vae = fit_vae(args, train_loader, "vae")
+    def generate_query(initial_classifier):
+        mc_samp = args.mc_samp
 
-    prior_m = torch.zeros(200, args.z)
-    prior_v = torch.ones(200, args.z)
-    query_z = torch.normal(prior_m, prior_v).requires_grad_(True)
+        prior_m = torch.zeros(args.query_size, args.z)
+        prior_v = torch.ones(args.query_size, args.z)
+        query_z = torch.normal(prior_m, prior_v).requires_grad_(True)
 
-    def simulated_annealing(f, x0, eps=0.02, horizon=100, T=10., cooling=0.1):
-        x = torch.tensor(x0)
-        x_best = torch.tensor(x0)
-        f_cur = f(x)
-        gamma = cooling ** (1 / horizon)
-        for i in trange(horizon):
-            x_prop = x + torch.normal(torch.zeros(x.shape), eps * torch.ones(x.shape))
-            f_prop = f(x_prop)
-            accept_prob = torch.exp((f_cur - f_prop) / T)
-            accepted = torch.rand([x.size(0)], device=device) < accept_prob
-            x[accepted] = x_prop[accepted]
-            f_cur[accepted] = f_prop[accepted]
-            T *= gamma
-        return x
+        def simulated_annealing(f, x0, eps=0.02, horizon=100, T=10., cooling=0.1):
+            x = torch.tensor(x0)
+            x_best = torch.tensor(x0)
+            f_cur = f(x)
+            gamma = cooling ** (1 / horizon)
+            for i in trange(horizon):
+                x_prop = x + torch.normal(torch.zeros(x.shape), eps * torch.ones(x.shape))
+                f_prop = f(x_prop)
+                accept_prob = torch.exp((f_cur - f_prop) / T)
+                accepted = torch.rand([x.size(0)], device=device) < accept_prob
+                x[accepted] = x_prop[accepted]
+                f_cur[accepted] = f_prop[accepted]
+                T *= gamma
+            return x
 
-    def active_objective(query_z):
-        p_z = ut.log_normal(query_z, prior_m, prior_v).exp()
-        rec = torch.stack([vae.sample_x_given(query_z) for _ in range(mc_samp)])
-        pred_y = initial_classifier(rec.reshape(-1, 1, 28, 28))
-        entropies = td.Categorical(logits=pred_y).entropy().reshape(mc_samp, 200).mean(dim=0)
-        return p_z * entropies
+        def active_objective(query_z):
+            p_z = ut.log_normal(query_z, prior_m, prior_v).exp()
+            rec = torch.stack([vae.sample_x_given(query_z) for _ in range(mc_samp)])
+            pred_y = initial_classifier(rec.reshape(-1, 1, 28, 28))
+            entropies = td.Categorical(logits=pred_y).entropy().reshape(mc_samp, args.query_size).mean(dim=0)
+            return p_z * entropies
 
-    query_z = simulated_annealing(active_objective, query_z, horizon=args.sa)
-    query_x = vae.sample_x_given(query_z).detach()
+        query_z = simulated_annealing(active_objective, query_z, horizon=args.sa)
+        query_x = vae.sample_x_given(query_z).detach()
+        return query_x
 
-    x_labels = all_classifier(query_x.view(query_x.size(0), 1, 28, 28)).argmax(-1)
-    new_dataset = torch.utils.data.TensorDataset(query_x.view(query_x.size(0), 1, 28, 28), x_labels)
-    updated_dataset = torch.utils.data.ConcatDataset([train_subdataset, new_dataset])
-    updated_loader = torch.utils.data.DataLoader(updated_dataset, **train_kwargs)
+    active_classifier = initial_classifier
+    active_loader = train_loader
+    for i in range(args.horizon):
+        query_x = generate_query(active_classifier)
 
-    classifier = Classifier(args, device)
-    new_classifier = classifier.train(updated_loader, test_loader, "new")
-    # classifier.test_model(new_classifier, test_loader)
+        x_labels = all_classifier(query_x.view(query_x.size(0), 1, 28, 28)).argmax(-1)
+        new_dataset = torch.utils.data.TensorDataset(query_x.view(query_x.size(0), 1, 28, 28), x_labels)
+        updated_dataset = torch.utils.data.ConcatDataset([train_subdataset, new_dataset])
+        active_loader = torch.utils.data.DataLoader(updated_dataset, **train_kwargs)
 
-    fig, axs = plt.subplots(10, 20)
-    for i, ax in enumerate(axs.flat):
-        ax.imshow(query_x[i].view(28, 28).detach())
-        ax.axis('off')
-    plt.tight_layout()
-    plt.subplots_adjust(wspace=0.1, hspace=0.1)
-    plt.show()
+        classifier = Classifier(args, device)
+        active_classifier = classifier.train(active_loader, test_loader, "new")
+        classifier.test_model(active_classifier, test_loader)
+
+        fig, axs = plt.subplots(5, args.query_size // 5)
+        for i, ax in enumerate(axs.flat):
+            ax.imshow(query_x[i].view(28, 28).detach())
+            ax.axis('off')
+        plt.tight_layout()
+        plt.subplots_adjust(wspace=0.1, hspace=0.1)
+        plt.savefig(f'query-{i}.png')
 
 if __name__ == '__main__':
     main()
