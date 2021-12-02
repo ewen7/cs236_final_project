@@ -8,6 +8,7 @@ import utils as ut
 from torch import nn, optim
 from torch.nn import functional as F
 from torchvision.utils import save_image
+import pdb
 
 def train(model, train_loader, labeled_subset, device, tqdm, writer,
           iter_max=np.inf, iter_save=np.inf,
@@ -22,7 +23,6 @@ def train(model, train_loader, labeled_subset, device, tqdm, writer,
             for batch_idx, (xu, yu) in enumerate(train_loader):
                 i += 1 # i is num of gradient steps taken by end of loop iteration
                 optimizer.zero_grad()
-
                 if y_status == 'none':
                     xu = torch.bernoulli(xu.to(device).reshape(xu.size(0), -1))
                     yu = yu.new(np.eye(10)[yu]).to(device).float()

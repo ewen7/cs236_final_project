@@ -1,6 +1,7 @@
 # Copyright (c) 2021 Rui Shu
 import numpy as np
 import os
+import argparse
 import shutil
 import sys
 import torch
@@ -10,6 +11,10 @@ from models.ssvae import SSVAE
 from models.vae import VAE
 from torch.nn import functional as F
 from torchvision import datasets, transforms
+import tarfile
+import tempfile
+import urllib.request
+from tqdm import tqdm
 
 bce = torch.nn.BCEWithLogitsLoss(reduction='none')
 
@@ -385,6 +390,74 @@ def get_mnist_data(device, use_test_subset=True):
     labeled_subset = (xl, yl)
     return train_loader, labeled_subset, (X_test, y_test)
 
+def download_dogs_data(dst_dir, url):
+    r"""
+    Downloads and uncompresses the specified dataset.
+    """
+
+    def update_download_progress(blk_n=1, blk_sz=1, total_sz=None):
+        assert update_download_progress.pbar is not None
+        pbar = update_download_progress.pbar
+        if total_sz is not None:
+            pbar.total = total_sz
+        pbar.update(blk_n * blk_sz - pbar.n)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = os.path.join(tmp_dir, "compressed_data")
+        url_name = url.split("/")[-1]
+        with tqdm(unit="B", unit_scale=True, desc=f"Downloading {url_name}") as pbar:
+            update_download_progress.pbar = pbar
+            urllib.request.urlretrieve(
+                url, tmp_path, reporthook=update_download_progress
+            )
+        with tarfile.open(tmp_path, "r") as f:
+            for member in tqdm(f.getmembers(), desc=f"Extracting {url_name}"):
+                f.extract(member, path=dst_dir)
+
+
+def get_dogs_data(data_dir, imsize, batch_size, eval_size, num_workers=1):
+    r"""
+    Creates a dataloader from a directory containing image data.
+    """
+
+    if not os.path.exists(data_dir):
+        download_dogs_data(
+            data_dir, url="http://vision.stanford.edu/aditya86/ImageNetDogs/images.tar"
+        )
+    
+    dataset = datasets.ImageFolder(
+        root=data_dir,
+        transform=transforms.Compose(
+            [
+                transforms.Resize(imsize),
+                transforms.CenterCrop(imsize),
+                transforms.ToTensor(),
+            ]
+        ),
+    )
+
+    eval_dataset, train_dataset = torch.utils.data.random_split(
+        dataset,
+        [eval_size, len(dataset) - eval_size],
+    )
+    eval_dataloader = torch.utils.data.DataLoader(
+        eval_dataset, batch_size=batch_size, num_workers=num_workers
+    )
+    train_dataloader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+    )
+
+    subset = list(range(0, len(train_dataset), 200))
+    train_subdataset = torch.utils.data.Subset(train_dataset, subset)
+
+    train_subdataloader = torch.utils.data.DataLoader(
+        train_subdataset, batch_size=batch_size, num_workers=num_workers,
+    )
+
+    return train_dataloader, train_subdataloader, eval_dataloader
 
 def static_binarize(x):
     # torch.bernoulli seeding behavior is different on CPU v GPU

@@ -22,6 +22,7 @@ from run_vae import fit_vae
 def main():
     # Training settings
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
+    parser.add_argument('--dataset', type=str, default='MNIST', help='dataset to utilize')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                         help='input batch size for training (default: 64)')
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
@@ -75,15 +76,22 @@ def main():
     #     ])
 
     # TODO: update this to be subset of dataset
-    train_dataset = datasets.MNIST('../data', train=True, download=True,
-                       transform=transform)         
-    subset = list(range(0, len(train_dataset), 200))
-    train_subdataset = torch.utils.data.Subset(train_dataset, subset)
-    test_dataset = datasets.MNIST('../data', train=False, transform=transform)
+    if args.dataset == 'MNIST':
+        train_dataset = datasets.MNIST('../data', train=True, download=True,
+                        transform=transform)         
+        test_dataset = datasets.MNIST('../data', train=False, transform=transform)    
+        subset = list(range(0, len(train_dataset), 200))
+        train_subdataset = torch.utils.data.Subset(train_dataset, subset)
 
-    all_loader = torch.utils.data.DataLoader(train_dataset,**train_kwargs)
-    train_loader = torch.utils.data.DataLoader(train_subdataset,**train_kwargs)
-    test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
+        all_loader = torch.utils.data.DataLoader(train_dataset,**train_kwargs)
+        train_loader = torch.utils.data.DataLoader(train_subdataset,**train_kwargs)
+        test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
+    elif args.dataset == 'Dogs':
+        root_dir = os.path.abspath(os.path.dirname(__file__))
+        data_dir = os.path.join(root_dir, "dogs_data")
+        all_loader, train_loader, test_loader = ut.get_dogs_data(data_dir, 32, 64, 1000, 4) # values from default project
+    else:
+        raise Exception("Invalid Dataset")
 
     vae = fit_vae(args, train_loader, "vae")
     ## Initial Classifiers
