@@ -36,6 +36,10 @@ def main():
                         help='number of epochs to train (default: 14)')
     parser.add_argument('--lr', type=float, default=1.0, metavar='LR',
                         help='learning rate (default: 1.0)')
+    parser.add_argument('--query_size', type=int, default=50,
+                        help='query size')
+    parser.add_argument('--horizon', type=int, default=10,
+                        help='horizon')
     parser.add_argument('-z', type=float, default=3, metavar='Z',
                         help='latent dimension')
     parser.add_argument('--device', type=str, default='cpu', metavar='DEV',
@@ -103,6 +107,7 @@ def main():
     initial_classifier = classifier.train(train_loader, test_loader, "initial")
     classifier.test_model(initial_classifier, test_loader)
 
+
     ## VAE
 
     mc_samp = 10
@@ -111,13 +116,13 @@ def main():
     prior_v = torch.ones(200, args.z)
     query_z = torch.normal(prior_m, prior_v).requires_grad_(True)
 
-    def simulated_annealing(f, x0, eps=0.1, horizon=100, T=10., cooling=0.1):
+    def simulated_annealing(f, x0, eps=0.02, horizon=100, T=10., cooling=0.1):
         x = torch.tensor(x0)
         x_best = torch.tensor(x0)
         f_cur = f(x)
         gamma = cooling ** (1 / horizon)
         for i in trange(horizon):
-            x_prop = x + torch.normal(eps * torch.ones(x.shape))
+            x_prop = x + torch.normal(torch.zeros(x.shape), eps * torch.ones(x.shape))
             f_prop = f(x_prop)
             accept_prob = torch.exp((f_cur - f_prop) / T)
             accepted = torch.rand([x.size(0)], device=device) < accept_prob
