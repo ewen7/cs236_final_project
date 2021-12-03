@@ -85,7 +85,7 @@ def main():
         train_dataset = datasets.MNIST('../data', train=True, download=True,
                         transform=transform)         
         test_dataset = datasets.MNIST('../data', train=False, transform=transform)    
-        subset = list(range(0, len(train_dataset), 100))
+        subset = list(range(0, len(train_dataset), 500))
         train_subdataset = torch.utils.data.Subset(train_dataset, subset)
 
         all_loader = torch.utils.data.DataLoader(train_dataset,**train_kwargs)
