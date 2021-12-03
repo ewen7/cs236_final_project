@@ -175,7 +175,7 @@ def main():
         updated_dataset = torch.utils.data.ConcatDataset([train_subdataset, new_dataset])
         active_loader = torch.utils.data.DataLoader(updated_dataset, **train_kwargs)
 
-        classifier = Classifier(args, device)
+        classifier = Classifier(args, device, dataset_type)
         active_classifier = classifier.train(active_loader, test_loader, "new")
         results += [classifier.test_model(active_classifier, test_loader)]
 
