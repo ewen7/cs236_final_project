@@ -9,8 +9,8 @@ from train import train
 from pprint import pprint
 from torchvision import datasets, transforms
 
-def fit_vae(args, train_loader, model_name, overwrite=True):
-    vae = VAE(z_dim=args.z, name=model_name).to(args.device)
+def fit_vae(args, train_loader, model_name, overwrite=True, dataset_type='mnist'):
+    vae = VAE(z_dim=args.z, name=model_name, dataset_type=dataset_type).to(args.device)
 
     writer = ut.prepare_writer(model_name, overwrite_existing=overwrite)
     vae = train(model=vae,

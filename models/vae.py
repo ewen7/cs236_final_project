@@ -7,13 +7,13 @@ from torch import nn
 from torch.nn import functional as F
 
 class VAE(nn.Module):
-    def __init__(self, nn='v1', name='vae', z_dim=2):
+    def __init__(self, nn='v1', name='vae', z_dim=2, dataset_type='mnist'):
         super().__init__()
         self.name = name
         self.z_dim = z_dim
         nn = getattr(nns, nn)
-        self.enc = nn.Encoder(self.z_dim)
-        self.dec = nn.Decoder(self.z_dim)
+        self.enc = nn.Encoder(self.z_dim, dataset_type=dataset_type)
+        self.dec = nn.Decoder(self.z_dim, dataset_type=dataset_type)
 
         # Set prior as fixed parameter attached to Module
         self.z_prior_m = torch.nn.Parameter(torch.zeros(1), requires_grad=False)

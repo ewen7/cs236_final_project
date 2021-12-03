@@ -22,7 +22,7 @@ from run_vae import fit_vae
 def main():
     # Training settings
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
-    parser.add_argument('--dataset', type=str, default='MNIST', help='dataset to utilize')
+    parser.add_argument('--dataset_type', type=str, default='MNIST', help='dataset to utilize')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                         help='input batch size for training (default: 64)')
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
@@ -74,15 +74,11 @@ def main():
                        'shuffle': True}
         train_kwargs.update(cuda_kwargs)
         test_kwargs.update(cuda_kwargs)
-
-    transform=transforms.ToTensor()
-    # transforms.Compose([
-    #     transforms.ToTensor(),
-    #     transforms.Normalize((0.1307,), (0.3081,))
-    #     ])
+    dataset_type = args.dataset_type.lower()
 
     # TODO: update this to be subset of dataset
-    if args.dataset == 'MNIST':
+    if dataset_type == 'mnist':
+        transform=transforms.ToTensor()
         train_dataset = datasets.MNIST('../data', train=True, download=True,
                         transform=transform)         
         test_dataset = datasets.MNIST('../data', train=False, transform=transform)    
@@ -92,34 +88,34 @@ def main():
         all_loader = torch.utils.data.DataLoader(train_dataset,**train_kwargs)
         train_loader = torch.utils.data.DataLoader(train_subdataset,**train_kwargs)
         test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
-    elif args.dataset == 'Dogs':
+    elif dataset_type == 'dogs':
         root_dir = os.path.abspath(os.path.dirname(__file__))
         data_dir = os.path.join(root_dir, "dogs_data")
-        all_loader, train_loader, test_loader = ut.get_dogs_data(data_dir, 32, 64, 1000, 4) # values from default project
+        all_loader, train_loader, test_loader = ut.get_dogs_data(data_dir, 32, args.batch_size, 1000) # values from default project
     else:
         raise Exception("Invalid Dataset")
 
     ## Initial Classifiers
-    full_classifier_path = 'checkpoints/full_classifier.pt'
+    full_classifier_path = f'checkpoints/full_classifier_{dataset_type}.pt'
     if not os.path.exists(full_classifier_path):
         epochs = args.epochs
         args.epochs = args.all_epochs
-        classifier = Classifier(args, device)
+        classifier = Classifier(args, device, dataset_type)
         all_classifier = classifier.train(all_loader, test_loader, "all")
         torch.save(all_classifier.state_dict(), full_classifier_path)
         args.epochs = epochs
     else:
-        all_classifier = Net()
+        all_classifier = Net(dataset_type)
         all_classifier.load_state_dict(torch.load(full_classifier_path))
 
-    classifier = Classifier(args, device)
+    classifier = Classifier(args, device, dataset_type)
     initial_classifier = classifier.train(train_loader, test_loader, "initial")
     classifier.test_model(initial_classifier, test_loader)
 
 
     ## VAE
 
-    vae = fit_vae(args, train_loader, "vae")
+    vae = fit_vae(args, train_loader, "vae", dataset_type=dataset_type)
     def generate_query(initial_classifier):
         mc_samp = args.mc_samp
 
