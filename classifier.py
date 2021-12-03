@@ -11,14 +11,22 @@ from torch.optim.lr_scheduler import StepLR
 from tqdm import tqdm
 
 class Net(nn.Module):
-    def __init__(self):
+    def __init__(self, dataset_type):
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(1, 32, 3, 1)
-        self.conv2 = nn.Conv2d(32, 64, 3, 1)
-        self.dropout1 = nn.Dropout(0.25)
-        self.dropout2 = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(9216, 128)
-        self.fc2 = nn.Linear(128, 10)
+        if dataset_type == 'mnist':
+            self.conv1 = nn.Conv2d(1, 32, 3, 1)
+            self.conv2 = nn.Conv2d(32, 64, 3, 1)
+            self.dropout1 = nn.Dropout(0.25)
+            self.dropout2 = nn.Dropout(0.5)
+            self.fc1 = nn.Linear(9216, 128)
+            self.fc2 = nn.Linear(128, 10)
+        elif dataset_type == 'dogs':
+            self.conv1 = nn.Conv2d(3, 32, 3, 1)
+            self.conv2 = nn.Conv2d(32, 64, 3, 1)
+            self.dropout1 = nn.Dropout(0.25)
+            self.dropout2 = nn.Dropout(0.5)
+            self.fc1 = nn.Linear(12544, 64) 
+            self.fc2 = nn.Linear(64, 120)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -36,9 +44,10 @@ class Net(nn.Module):
         return output
 
 class Classifier():
-    def __init__(self, args, device):
+    def __init__(self, args, device, dataset_type):
         self.args = args
         self.device = device
+        self.dataset_type = dataset_type
 
     def train_model(self, model, optimizer, train_loader, epoch):
         model.train()
@@ -75,7 +84,7 @@ class Classifier():
             100. * correct / len(test_loader.dataset)))
 
     def train(self, train_loader, test_loader, model_name):
-        model = Net().to(self.device)
+        model = Net(self.dataset_type).to(self.device)
         optimizer = optim.Adadelta(model.parameters(), lr=self.args.lr)
 
         scheduler = StepLR(optimizer, step_size=1, gamma=self.args.gamma)
