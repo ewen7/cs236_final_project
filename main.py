@@ -2,6 +2,7 @@ from __future__ import print_function
 import argparse
 import os
 import numpy as np
+import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -84,7 +85,7 @@ def main():
         train_dataset = datasets.MNIST('../data', train=True, download=True,
                         transform=transform)         
         test_dataset = datasets.MNIST('../data', train=False, transform=transform)    
-        subset = random.sample(list(range(len(train_dataset))), 400)
+        subset = list(range(0, len(train_dataset), 100))
         train_subdataset = torch.utils.data.Subset(train_dataset, subset)
 
         all_loader = torch.utils.data.DataLoader(train_dataset,**train_kwargs)
