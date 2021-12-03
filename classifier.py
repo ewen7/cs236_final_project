@@ -69,10 +69,12 @@ class Classifier():
                 correct += pred.eq(target.view_as(pred)).sum().item()
 
         test_loss /= len(test_loader.dataset)
+        acc = correct / len(test_loader.dataset)
 
         print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
             test_loss, correct, len(test_loader.dataset),
-            100. * correct / len(test_loader.dataset)))
+            100. * acc))
+        return acc
 
     def train(self, train_loader, test_loader, model_name):
         model = Net().to(self.device)
