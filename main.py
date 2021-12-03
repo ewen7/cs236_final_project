@@ -84,7 +84,7 @@ def main():
         train_dataset = datasets.MNIST('../data', train=True, download=True,
                         transform=transform)         
         test_dataset = datasets.MNIST('../data', train=False, transform=transform)    
-        subset = random.sample(list(range(len(train_dataset))), 400)
+        subset = list(range(0, len(train_dataset), 400))
         train_subdataset = torch.utils.data.Subset(train_dataset, subset)
 
         all_loader = torch.utils.data.DataLoader(train_dataset,**train_kwargs)
@@ -114,6 +114,15 @@ def main():
     initial_classifier = classifier.train(train_loader, test_loader, "initial")
     results = [classifier.test_model(initial_classifier, test_loader)]
 
+    ## Baseline - only works for MNIST
+    subset = list(range(100, len(train_dataset), 300))
+    new_dataset = torch.utils.data.Subset(train_dataset, subset)
+    baseline_dataset = torch.utils.data.ConcatDataset([train_subdataset, new_dataset])
+    baseline_loader = torch.utils.data.DataLoader(baseline_dataset, **train_kwargs)
+
+    classifier = Classifier(args, device, dataset_type)
+    baseline_classifier = classifier.train(baseline_loader, test_loader, "baseline")
+    classifier.test_model(baseline_classifier, test_loader)
 
     ## VAE
 
