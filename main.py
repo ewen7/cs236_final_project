@@ -30,6 +30,7 @@ def main():
                         help='input batch size for testing (default: 1000)')
     parser.add_argument('--epochs', type=int, default=14, metavar='N',
                         help='number of epochs to train (default: 14)')
+    parser.add_argument('--start', type=int, default=200, help='start size')
     parser.add_argument('--iter-max', type=int, default=20000, metavar='IN',
                         help='number of VAE iterations to train (default: 14)')
     parser.add_argument('--random', action='store_true', default=False,
@@ -62,6 +63,8 @@ def main():
                         help='how many batches to wait before logging training status')
     parser.add_argument('--save-model', action='store_true', default=False,
                         help='For Saving the current Model')
+    parser.add_argument('--baseline', action='store_true', default=False,
+                        help='run baseline')
     args = parser.parse_args()
     use_cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -85,7 +88,7 @@ def main():
         train_dataset = datasets.MNIST('../data', train=True, download=True,
                         transform=transform)         
         test_dataset = datasets.MNIST('../data', train=False, transform=transform)    
-        subset = list(range(0, len(train_dataset), 500))
+        subset = random.Random(args.seed).sample(list(range(0, len(train_dataset))), args.start)
         train_subdataset = torch.utils.data.Subset(train_dataset, subset)
 
         all_loader = torch.utils.data.DataLoader(train_dataset,**train_kwargs)
@@ -111,23 +114,31 @@ def main():
         all_classifier = NetMnist(dataset_type) if dataset_type == "mnist" else NetDogs(dataset_type)
         all_classifier.load_state_dict(torch.load(full_classifier_path))
 
+    ## Baseline - only works for MNIST
+    if args.baseline:
+        current_dataset = train_subdataset
+        classifier = Classifier(args, device, dataset_type)
+        baseline_classifier = classifier.train(train_loader, test_loader, "baseline")
+        results = [classifier.test_model(baseline_classifier, test_loader)]
+        for i in range(args.horizon):
+            subset = random.Random(args.seed + i).sample(list(range(0, len(train_dataset))), args.query_size)
+            new_dataset = torch.utils.data.Subset(train_dataset, subset)
+            current_dataset = torch.utils.data.ConcatDataset([current_dataset, new_dataset])
+            loader = torch.utils.data.DataLoader(current_dataset, **train_kwargs)
+            classifier = Classifier(args, device, dataset_type)
+            baseline_classifier = classifier.train(loader, test_loader, "baseline")
+            results += [classifier.test_model(baseline_classifier, test_loader)]
+        print(results)
+        return
+
     classifier = Classifier(args, device, dataset_type)
     initial_classifier = classifier.train(train_loader, test_loader, "initial")
     results = [classifier.test_model(initial_classifier, test_loader)]
 
-    ## Baseline - only works for MNIST
-    subset = list(range(100, len(train_dataset), 300))
-    new_dataset = torch.utils.data.Subset(train_dataset, subset)
-    baseline_dataset = torch.utils.data.ConcatDataset([train_subdataset, new_dataset])
-    baseline_loader = torch.utils.data.DataLoader(baseline_dataset, **train_kwargs)
-
-    classifier = Classifier(args, device, dataset_type)
-    baseline_classifier = classifier.train(baseline_loader, test_loader, "baseline")
-    classifier.test_model(baseline_classifier, test_loader)
-
     ## VAE
-
-    vae = fit_vae(args, train_loader, "vae", dataset_type=dataset_type)
+    
+    vae = torch.load('checkpoints/vae.pt')#fit_vae(args, all_loader, "vae", dataset_type=dataset_type)
+    #torch.save(vae, 'checkpoints/vae.pt')
     def generate_query(initial_classifier):
         mc_samp = args.mc_samp
 
@@ -135,7 +146,7 @@ def main():
         prior_v = torch.ones(args.query_size, args.z)
         query_z = torch.normal(prior_m, prior_v).requires_grad_(True)
 
-        def simulated_annealing(f, x0, eps=0.02, horizon=100, T=10., cooling=0.1):
+        def simulated_annealing(f, x0, eps=0.05, horizon=500, T=0.2, cooling=0.1):
             x = torch.tensor(x0)
             x_best = torch.tensor(x0)
             f_cur = f(x)
@@ -162,7 +173,6 @@ def main():
                 opt.step(closure)
             return x0.detach()
 
-
         def active_objective(query_z):
             p_z = ut.log_normal(query_z, prior_m, prior_v).exp()
             rec = torch.stack([vae.sample_x_given(query_z) for _ in range(mc_samp)])
@@ -170,20 +180,30 @@ def main():
             entropies = td.Categorical(logits=pred_y).entropy().reshape(mc_samp, args.query_size).mean(dim=0)
             return p_z * entropies
 
+        def active_objective_(query_z):
+            p_z = ut.log_normal(query_z, prior_m, prior_v).exp()
+            rec = torch.stack([vae.sample_x_given(query_z) for _ in range(mc_samp)])
+            pred_y = initial_classifier(rec.reshape(-1, 1, 28, 28))
+            entropies = td.Categorical(logits=pred_y).entropy().reshape(mc_samp, args.query_size).mean(dim=0)
+            return p_z.mean(), entropies.mean()
+
         if not args.random:
             query_z = simulated_annealing(active_objective, query_z, horizon=args.sa)
+            print(active_objective_(query_z))
         query_x = vae.sample_x_given(query_z).detach()
         return query_x
 
     active_classifier = initial_classifier
     active_loader = train_loader
+    active_dataset = train_subdataset
     for step in range(args.horizon):
         query_x = generate_query(active_classifier)
 
         x_labels = all_classifier(query_x.view(query_x.size(0), 1, 28, 28)).argmax(-1)
         new_dataset = torch.utils.data.TensorDataset(query_x.view(query_x.size(0), 1, 28, 28), x_labels)
-        updated_dataset = torch.utils.data.ConcatDataset([train_subdataset, new_dataset])
+        updated_dataset = torch.utils.data.ConcatDataset([active_dataset, new_dataset])
         active_loader = torch.utils.data.DataLoader(updated_dataset, **train_kwargs)
+        active_dataset = updated_dataset
 
         classifier = Classifier(args, device, dataset_type)
         active_classifier = classifier.train(active_loader, test_loader, "new")

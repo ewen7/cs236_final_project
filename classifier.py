@@ -169,7 +169,7 @@ class Classifier():
         scheduler = StepLR(optimizer, step_size=1, gamma=self.args.gamma)
         for epoch in tqdm(range(1, self.args.epochs + 1)):
             self.train_model(model, optimizer, train_loader, epoch)
-            self.test_model(model, test_loader)
+            #self.test_model(model, test_loader)
             scheduler.step()
 
         if self.args.save_model:
