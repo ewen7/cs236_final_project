@@ -17,7 +17,7 @@ from pprint import pprint
 
 from models.vae import VAE
 from train import train
-from classifier import Classifier, Net
+from classifier import Classifier, NetMnist, NetDogs # Net
 from run_vae import fit_vae
 
 def main():
@@ -108,7 +108,7 @@ def main():
         torch.save(all_classifier.state_dict(), full_classifier_path)
         args.epochs = epochs
     else:
-        all_classifier = Net(dataset_type)
+        all_classifier = NetMnist(dataset_type) if dataset_type == "mnist" else NetDogs(dataset_type)
         all_classifier.load_state_dict(torch.load(full_classifier_path))
 
     classifier = Classifier(args, device, dataset_type)
