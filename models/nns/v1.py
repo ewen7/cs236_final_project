@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import utils as ut
 from torch import autograd, nn, optim
 from torch.nn import functional as F
+import pdb
 
 class Classifier(nn.Module):
     def __init__(self, y_dim, dataset_type):
@@ -46,16 +47,17 @@ class Encoder(nn.Module):
             )
         elif dataset_type == 'dogs':
             self.net = nn.Sequential(
-                nn.Linear(64 + y_dim, 3072),
+                nn.Linear(3072 + y_dim, 64),
                 nn.ELU(),
-                nn.Linear(3072, 3072),
+                nn.Linear(64, 64),
                 nn.ELU(),
-                nn.Linear(3072, 2 * z_dim),
+                nn.Linear(64, 2 * z_dim),
             )
 
     def forward(self, x, y=None):
         xy = x if y is None else torch.cat((x, y), dim=1)
-        h = self.net(xy)
+        # pdb.set_trace()
+        h = self.net(xy) # xy: [64, 3072] --> [64, 6]
         m, v = ut.gaussian_parameters(h, dim=1)
         return m, v
 
@@ -74,11 +76,11 @@ class Decoder(nn.Module):
             )
         elif dataset_type == 'dogs':
             self.net = nn.Sequential(
-                nn.Linear(z_dim + y_dim, 3072),
+                nn.Linear(z_dim + y_dim, 64),
                 nn.ELU(),
-                nn.Linear(3072, 3072),
+                nn.Linear(64, 64),
                 nn.ELU(),
-                nn.Linear(3072, 12544)
+                nn.Linear(64, 3072)
             )
 
     def forward(self, z, y=None):
