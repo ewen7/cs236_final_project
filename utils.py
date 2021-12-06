@@ -457,7 +457,8 @@ def get_dogs_data(data_dir, imsize, batch_size, eval_size, num_workers=1):
         train_subdataset, batch_size=batch_size, num_workers=num_workers,
     )
 
-    return train_dataloader, train_subdataloader, eval_dataloader
+    # return train_dataloader, train_subdataloader, eval_dataloader
+    return train_dataset, train_subdataset, eval_dataset
 
 def static_binarize(x):
     # torch.bernoulli seeding behavior is different on CPU v GPU

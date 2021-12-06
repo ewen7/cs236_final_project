@@ -12,6 +12,7 @@ from torchvision import datasets, transforms
 def fit_vae(args, train_loader, model_name, overwrite=True, dataset_type='mnist'):
     vae = VAE(z_dim=args.z, name=model_name, dataset_type=dataset_type).to(args.device)
 
+    iter_save = 10000 if dataset_type == 'mnist' else 1000
     writer = ut.prepare_writer(model_name, overwrite_existing=overwrite)
     vae = train(model=vae,
           train_loader=train_loader,
@@ -20,7 +21,7 @@ def fit_vae(args, train_loader, model_name, overwrite=True, dataset_type='mnist'
           tqdm=tqdm.tqdm,
           writer=writer,
           iter_max=args.iter_max,
-          iter_save=10000)
+          iter_save=iter_save)
     # ut.evaluate_lower_bound(vae, labeled_subset, run_iwae=args.train == 2)
 
     return vae

@@ -17,8 +17,9 @@ from pprint import pprint
 
 from models.vae import VAE
 from train import train
-from classifier import Classifier, NetMnist, NetDogs # Net
+from classifier import Classifier, Net # Net
 from run_vae import fit_vae
+import pdb
 
 def main():
     # Training settings
@@ -83,6 +84,7 @@ def main():
     dataset_type = args.dataset_type.lower()
 
     # TODO: update this to be subset of dataset
+    
     if dataset_type == 'mnist':
         transform=transforms.ToTensor()
         train_dataset = datasets.MNIST('../data', train=True, download=True,
@@ -90,16 +92,18 @@ def main():
         test_dataset = datasets.MNIST('../data', train=False, transform=transform)    
         subset = random.Random(args.seed).sample(list(range(0, len(train_dataset))), args.start)
         train_subdataset = torch.utils.data.Subset(train_dataset, subset)
-
-        all_loader = torch.utils.data.DataLoader(train_dataset,**train_kwargs)
-        train_loader = torch.utils.data.DataLoader(train_subdataset,**train_kwargs)
-        test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
     elif dataset_type == 'dogs':
         root_dir = os.path.abspath(os.path.dirname(__file__))
         data_dir = os.path.join(root_dir, "dogs_data")
-        all_loader, train_loader, test_loader = ut.get_dogs_data(data_dir, 32, args.batch_size, 1000) # values from default project
+        train_dataset, train_subdataset, test_dataset = ut.get_dogs_data(data_dir, 32, args.batch_size, 1000)
+        # all_loader, train_loader, test_loader = ut.get_dogs_data(data_dir, 32, args.batch_size, 1000) # values from default project
     else:
         raise Exception("Invalid Dataset")
+    
+    imsize = 28 if dataset_type == 'mnist' else 32
+    all_loader = torch.utils.data.DataLoader(train_dataset,**train_kwargs)
+    train_loader = torch.utils.data.DataLoader(train_subdataset,**train_kwargs)
+    test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
 
     ## Initial Classifiers
     full_classifier_path = f'checkpoints/full_classifier_{dataset_type}.pt'
@@ -111,7 +115,7 @@ def main():
         torch.save(all_classifier.state_dict(), full_classifier_path)
         args.epochs = epochs
     else:
-        all_classifier = NetMnist(dataset_type) if dataset_type == "mnist" else NetDogs(dataset_type)
+        all_classifier = Net(dataset_type) #if dataset_type == "mnist" else NetDogs(dataset_type)
         all_classifier.load_state_dict(torch.load(full_classifier_path))
 
     ## Baseline - only works for MNIST
@@ -136,10 +140,17 @@ def main():
     results = [classifier.test_model(initial_classifier, test_loader)]
 
     ## VAE
+    vae_path = 'checkpoints/vae_{dataset_type}.pt' if dataset_type=='mnist' else 'checkpoints/vae/model-10000.pt'
+    if not os.path.exists(vae_path):
+        print("fitting vae...")
+        vae = fit_vae(args, all_loader, "vae_{dataset_type}", dataset_type=dataset_type)
+        torch.save(vae, vae_path)
+    else:
+        print("loading vae...")
+        vae = torch.load(vae_path)
     
-    vae = torch.load('checkpoints/vae.pt')#fit_vae(args, all_loader, "vae", dataset_type=dataset_type)
-    #torch.save(vae, 'checkpoints/vae.pt')
-    def generate_query(initial_classifier):
+    def generate_query(query_classifier):
+        # pdb.set_trace()
         mc_samp = args.mc_samp
 
         prior_m = torch.zeros(args.query_size, args.z)
@@ -149,11 +160,15 @@ def main():
         def simulated_annealing(f, x0, eps=0.05, horizon=500, T=0.2, cooling=0.1):
             x = torch.tensor(x0)
             x_best = torch.tensor(x0)
+            # pdb.set_trace()
             f_cur = f(x)
+            # f_cur = active_objective(x)
             gamma = cooling ** (1 / horizon)
             for i in trange(horizon):
                 x_prop = x + torch.normal(torch.zeros(x.shape), eps * torch.ones(x.shape))
+                # pdb.set_trace()
                 f_prop = f(x_prop)
+                # f_prop = active_objective(x_prop)
                 accept_prob = torch.exp((f_cur - f_prop) / T)
                 accepted = torch.rand([x.size(0)], device=device) < accept_prob
                 x[accepted] = x_prop[accepted]
@@ -176,14 +191,14 @@ def main():
         def active_objective(query_z):
             p_z = ut.log_normal(query_z, prior_m, prior_v).exp()
             rec = torch.stack([vae.sample_x_given(query_z) for _ in range(mc_samp)])
-            pred_y = initial_classifier(rec.reshape(-1, 1, 28, 28))
+            pred_y = query_classifier(rec.reshape(-1, 1, imsize, imsize))
             entropies = td.Categorical(logits=pred_y).entropy().reshape(mc_samp, args.query_size).mean(dim=0)
             return p_z * entropies
 
         def active_objective_(query_z):
             p_z = ut.log_normal(query_z, prior_m, prior_v).exp()
             rec = torch.stack([vae.sample_x_given(query_z) for _ in range(mc_samp)])
-            pred_y = initial_classifier(rec.reshape(-1, 1, 28, 28))
+            pred_y = query_classifier(rec.reshape(-1, 1, imsize, imsize))
             entropies = td.Categorical(logits=pred_y).entropy().reshape(mc_samp, args.query_size).mean(dim=0)
             return p_z.mean(), entropies.mean()
 
@@ -196,22 +211,26 @@ def main():
     active_classifier = initial_classifier
     active_loader = train_loader
     active_dataset = train_subdataset
-    for step in range(args.horizon):
+    for step in tqdm(range(args.horizon)):
+        print("step", step)
         query_x = generate_query(active_classifier)
+        print("got query_x")
 
-        x_labels = all_classifier(query_x.view(query_x.size(0), 1, 28, 28)).argmax(-1)
-        new_dataset = torch.utils.data.TensorDataset(query_x.view(query_x.size(0), 1, 28, 28), x_labels)
+        x_labels = all_classifier(query_x.view(query_x.size(0), 1, imsize, imsize)).argmax(-1)
+        new_dataset = torch.utils.data.TensorDataset(query_x.view(query_x.size(0), 1, imsize, imsize), x_labels)
         updated_dataset = torch.utils.data.ConcatDataset([active_dataset, new_dataset])
         active_loader = torch.utils.data.DataLoader(updated_dataset, **train_kwargs)
         active_dataset = updated_dataset
-
+        print("updated dataset")
         classifier = Classifier(args, device, dataset_type)
+        print("training classifier...")
         active_classifier = classifier.train(active_loader, test_loader, "new")
+        print("testing classifier...")
         results += [classifier.test_model(active_classifier, test_loader)]
 
         fig, axs = plt.subplots(5, args.query_size // 5)
         for i, ax in enumerate(axs.flat):
-            ax.imshow(query_x[i].view(28, 28).detach())
+            ax.imshow(query_x[i].view(imsize, imsize).detach())
             ax.axis('off')
         plt.tight_layout()
         plt.subplots_adjust(wspace=0.1, hspace=0.1)
