@@ -142,10 +142,10 @@ def main(args, seed):
     results = [classifier.test_model(initial_classifier, test_loader)]
 
     ## VAE
-    vae_path = 'checkpoints/vae_{dataset_type}.pt' if dataset_type=='mnist' else 'checkpoints/vae/model-10000.pt'
+    vae_path = f'checkpoints/vae_{dataset_type}.pt'
     if not os.path.exists(vae_path):
         print("fitting vae...")
-        vae = fit_vae(args, all_loader, "vae_{dataset_type}", dataset_type=dataset_type)
+        vae = fit_vae(args, all_loader, f"vae_{dataset_type}", dataset_type=dataset_type)
         torch.save(vae, vae_path)
     else:
         print("loading vae...")
@@ -193,14 +193,16 @@ def main(args, seed):
         def active_objective(query_z):
             p_z = ut.log_normal(query_z, prior_m, prior_v).exp()
             rec = torch.stack([vae.sample_x_given(query_z) for _ in range(mc_samp)])
-            pred_y = query_classifier(rec.reshape(-1, 1, imsize, imsize))
+            num_channels = 1 if dataset_type == 'mnist' else 3
+            pred_y = query_classifier(rec.reshape(-1, num_channels, imsize, imsize))
             entropies = td.Categorical(logits=pred_y).entropy().reshape(mc_samp, args.query_size).mean(dim=0)
             return p_z * entropies
 
         def active_objective_(query_z):
             p_z = ut.log_normal(query_z, prior_m, prior_v).exp()
             rec = torch.stack([vae.sample_x_given(query_z) for _ in range(mc_samp)])
-            pred_y = query_classifier(rec.reshape(-1, 1, imsize, imsize))
+            num_channels = 1 if dataset_type == 'mnist' else 3
+            pred_y = query_classifier(rec.reshape(-1, num_channels, imsize, imsize))
             entropies = td.Categorical(logits=pred_y).entropy().reshape(mc_samp, args.query_size).mean(dim=0)
             return p_z.mean(), entropies.mean()
 
@@ -218,8 +220,9 @@ def main(args, seed):
         query_x = generate_query(active_classifier)
         print("got query_x")
 
-        x_labels = all_classifier(query_x.view(query_x.size(0), 1, imsize, imsize)).argmax(-1)
-        new_dataset = torch.utils.data.TensorDataset(query_x.view(query_x.size(0), 1, imsize, imsize), x_labels)
+        num_channels = 1 if dataset_type == 'mnist' else 3
+        x_labels = all_classifier(query_x.view(query_x.size(0), num_channels, imsize, imsize)).argmax(-1)
+        new_dataset = torch.utils.data.TensorDataset(query_x.view(query_x.size(0), num_channels, imsize, imsize), x_labels)
         updated_dataset = torch.utils.data.ConcatDataset([active_dataset, new_dataset])
         active_loader = torch.utils.data.DataLoader(updated_dataset, **train_kwargs)
         active_dataset = updated_dataset
@@ -231,8 +234,10 @@ def main(args, seed):
         results += [classifier.test_model(active_classifier, test_loader)]
 
         fig, axs = plt.subplots(5, args.query_size // 5)
+        num_channels = 1 if dataset_type == 'mnist' else 3
         for i, ax in enumerate(axs.flat):
-            ax.imshow(query_x[i].view(imsize, imsize).detach())
+            image = query_x[i].view(num_channels, imsize, imsize).detach()
+            ax.imshow(image.permute(1, 2, 0))
             ax.axis('off')
         plt.tight_layout()
         plt.subplots_adjust(wspace=0.1, hspace=0.1)
