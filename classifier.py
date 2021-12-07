@@ -71,16 +71,20 @@ class Classifier():
         model.eval()
         test_loss = 0
         correct = 0
+        print("test length", len(test_loader))
         with torch.no_grad():
             for data, target in test_loader:
                 data, target = data.to(self.device), target.to(self.device)
                 output = model(data)
+                pdb.set_trace()
                 test_loss += F.nll_loss(output, target, reduction='sum').item()  # sum up batch loss
                 pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
                 correct += pred.eq(target.view_as(pred)).sum().item()
+                print("batch, ", test_loss, correct)
 
         test_loss /= len(test_loader.dataset)
         acc = correct / len(test_loader.dataset)
+        print("total", test_loss, acc)
 
         print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
             test_loss, correct, len(test_loader.dataset),
@@ -88,7 +92,6 @@ class Classifier():
         return acc
 
     def train(self, train_loader, test_loader, model_name):
-        print("classifier train")
         model = Net(self.dataset_type) #if self.dataset_type == "mnist" else NetDogs(self.dataset_type)
         model = model.to(self.device)
         optimizer = optim.Adadelta(model.parameters(), lr=self.args.lr)

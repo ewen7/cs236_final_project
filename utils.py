@@ -15,6 +15,7 @@ import tarfile
 import tempfile
 import urllib.request
 from tqdm import tqdm
+import pdb
 
 bce = torch.nn.BCEWithLogitsLoss(reduction='none')
 
@@ -435,11 +436,14 @@ def get_dogs_data(data_dir, imsize, batch_size, eval_size, num_workers=1):
             ]
         ),
     )
+    print("shape", len(dataset))
 
     eval_dataset, train_dataset = torch.utils.data.random_split(
         dataset,
         [eval_size, len(dataset) - eval_size],
     )
+    pdb.set_trace()
+    print("shape after", len(eval_dataset), len(train_dataset))
     eval_dataloader = torch.utils.data.DataLoader(
         eval_dataset, batch_size=batch_size, num_workers=num_workers
     )
@@ -450,7 +454,7 @@ def get_dogs_data(data_dir, imsize, batch_size, eval_size, num_workers=1):
         num_workers=num_workers,
     )
 
-    subset = list(range(0, len(train_dataset), 200))
+    subset = list(range(0, len(train_dataset), 1)) # 40
     train_subdataset = torch.utils.data.Subset(train_dataset, subset)
 
     train_subdataloader = torch.utils.data.DataLoader(

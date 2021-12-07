@@ -148,7 +148,23 @@ def main():
     else:
         print("loading vae...")
         vae = torch.load(vae_path)
-    
+
+    ## test vae
+    prior_m = torch.zeros(args.query_size, args.z)
+    prior_v = torch.ones(args.query_size, args.z)
+    query_z = torch.normal(prior_m, prior_v).requires_grad_(True)
+    query_x = vae.sample_x_given(query_z).detach()
+    fig, axs = plt.subplots(5, args.query_size // 5)
+    num_channels = 1 if dataset_type == 'mnist' else 3
+    for i, ax in enumerate(axs.flat):
+        image = query_x[i].view(num_channels, imsize, imsize).detach()
+        ax.imshow(image.permute(1, 2, 0))
+        ax.axis('off')
+    plt.tight_layout()
+    plt.subplots_adjust(wspace=0.1, hspace=0.1)
+    plt.savefig(f'test-vae-query.png')
+    pdb.set_trace()
+
     def generate_query(query_classifier):
         # pdb.set_trace()
         mc_samp = args.mc_samp
