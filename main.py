@@ -21,8 +21,7 @@ from classifier import Classifier, Net # Net
 from run_vae import fit_vae
 import pdb
 
-def main():
-    # Training settings
+if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
     parser.add_argument('--dataset_type', type=str, default='MNIST', help='dataset to utilize')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
@@ -67,9 +66,12 @@ def main():
     parser.add_argument('--baseline', action='store_true', default=False,
                         help='run baseline')
     args = parser.parse_args()
+
+def main(args, seed):
+    # Training settings
     use_cuda = not args.no_cuda and torch.cuda.is_available()
 
-    torch.manual_seed(args.seed)
+    torch.manual_seed(seed)
 
     device = torch.device("cuda" if use_cuda else "cpu")
 
@@ -90,12 +92,12 @@ def main():
         train_dataset = datasets.MNIST('../data', train=True, download=True,
                         transform=transform)         
         test_dataset = datasets.MNIST('../data', train=False, transform=transform)    
-        subset = random.Random(args.seed).sample(list(range(0, len(train_dataset))), args.start)
+        subset = random.Random(seed).sample(list(range(0, len(train_dataset))), args.start)
         train_subdataset = torch.utils.data.Subset(train_dataset, subset)
     elif dataset_type == 'dogs':
         root_dir = os.path.abspath(os.path.dirname(__file__))
         data_dir = os.path.join(root_dir, "dogs_data")
-        train_dataset, train_subdataset, test_dataset = ut.get_dogs_data(data_dir, 32, args.batch_size, 1000)
+        train_dataset, train_subdataset, test_dataset = ut.get_dogs_data(data_dir, 32, args.batch_size, 1000, args.start)
         # all_loader, train_loader, test_loader = ut.get_dogs_data(data_dir, 32, args.batch_size, 1000) # values from default project
     else:
         raise Exception("Invalid Dataset")
@@ -125,7 +127,7 @@ def main():
         baseline_classifier = classifier.train(train_loader, test_loader, "baseline")
         results = [classifier.test_model(baseline_classifier, test_loader)]
         for i in range(args.horizon):
-            subset = random.Random(args.seed + i).sample(list(range(0, len(train_dataset))), args.query_size)
+            subset = random.Random(seed + i).sample(list(range(0, len(train_dataset))), args.query_size)
             new_dataset = torch.utils.data.Subset(train_dataset, subset)
             current_dataset = torch.utils.data.ConcatDataset([current_dataset, new_dataset])
             loader = torch.utils.data.DataLoader(current_dataset, **train_kwargs)
@@ -133,7 +135,7 @@ def main():
             baseline_classifier = classifier.train(loader, test_loader, "baseline")
             results += [classifier.test_model(baseline_classifier, test_loader)]
         print(results)
-        return
+        return results
 
     classifier = Classifier(args, device, dataset_type)
     initial_classifier = classifier.train(train_loader, test_loader, "initial")
@@ -258,6 +260,7 @@ def main():
         plt.savefig(f'query-{step}.png')
 
     print(results)
+    return results
 
 if __name__ == '__main__':
-    main()
+    main(args, args.seed)

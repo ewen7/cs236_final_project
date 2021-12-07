@@ -14,6 +14,7 @@ from torchvision import datasets, transforms
 import tarfile
 import tempfile
 import urllib.request
+import random
 from tqdm import tqdm
 import pdb
 
@@ -416,7 +417,7 @@ def download_dogs_data(dst_dir, url):
                 f.extract(member, path=dst_dir)
 
 
-def get_dogs_data(data_dir, imsize, batch_size, eval_size, num_workers=1):
+def get_dogs_data(data_dir, imsize, batch_size, eval_size, start, num_workers=1):
     r"""
     Creates a dataloader from a directory containing image data.
     """
@@ -454,7 +455,11 @@ def get_dogs_data(data_dir, imsize, batch_size, eval_size, num_workers=1):
         num_workers=num_workers,
     )
 
+<<<<<<< HEAD
     subset = list(range(0, len(train_dataset), 1)) # 40
+=======
+    subset = random.sample(list(range(0, len(train_dataset))), start)
+>>>>>>> f6cdc11e01435a53c7774ded05378bdf3341b1e5
     train_subdataset = torch.utils.data.Subset(train_dataset, subset)
 
     train_subdataloader = torch.utils.data.DataLoader(
